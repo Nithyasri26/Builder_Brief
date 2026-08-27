@@ -1,0 +1,46 @@
+{
+  "name": "nammasahaay-ai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NammaSahaay AI — one conversation, every public service. A conversational citizen-service layer above India's existing digital public infrastructure.",
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "start": "next start -p 3000",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "db:dev": "node scripts/mongo-dev.mjs",
+    "demo:check": "node scripts/demo-journey.mjs",
+    "passport:check": "node scripts/passport-journey.mjs"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.548.0",
+    "mongodb": "^7.6.0",
+    "mrz": "^5.0.2",
+    "next": "15.5.23",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "server-only": "^0.0.1",
+    "sharp": "^0.35.4",
+    "tailwind-merge": "^3.3.1",
+    "tesseract.js": "^5.1.1",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.6",
+    "@tailwindcss/postcss": "^4.1.14",
+    "@types/node": "^22.18.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^15.5.23",
+    "mongodb-memory-server": "^11.2.0",
+    "tailwindcss": "^4.1.14",
+    "typescript": "^5.9.3"
+  },
+  "overrides": {
+    "postcss": "^8.5.26",
+    "sharp": "^0.35.4"
+  }
+}
