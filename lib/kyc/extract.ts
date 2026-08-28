@@ -163,19 +163,28 @@ function parsePassportMrz(rows: string[]): {
   try {
     const result = parseMrz(candidate.length === 2 ? candidate : candidate[0]);
     const f = result.fields;
-    const mrzDate = (value?: string | null): string | undefined => {
+    // MRZ dates are YYMMDD with no century. The century has to be inferred from
+    // context: a birth date is in the past (pivot on a sliding window), while an
+    // expiry date is always this century — a passport expiring in '45 means 2045,
+    // not 1945.
+    const mrzDate = (value: string | null | undefined, kind: 'birth' | 'expiry'): string | undefined => {
       if (!value || value.length !== 6) return undefined;
       const yy = Number(value.slice(0, 2));
-      const year = yy > 40 ? 1900 + yy : 2000 + yy;
+      const year =
+        kind === 'expiry'
+          ? 2000 + yy
+          : yy > 40
+            ? 1900 + yy
+            : 2000 + yy;
       return toIso(value.slice(4, 6), value.slice(2, 4), String(year));
     };
     const name = [f.firstName, f.lastName].filter(Boolean).map((n) => titleCase(String(n))).join(' ');
     return {
       name: name || undefined,
-      dob: mrzDate(f.birthDate),
+      dob: mrzDate(f.birthDate, 'birth'),
       gender: f.sex === 'female' ? 'female' : f.sex === 'male' ? 'male' : undefined,
       number: f.documentNumber ? String(f.documentNumber).replace(/</g, '') : undefined,
-      expiry: mrzDate(f.expirationDate),
+      expiry: mrzDate(f.expirationDate, 'expiry'),
     };
   } catch {
     return null;

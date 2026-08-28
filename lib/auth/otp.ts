@@ -140,7 +140,10 @@ export async function verifyOtpChallenge(
     }
   }
 
-  const allVerified = (Object.keys(next) as OtpChannel[]).every((c) => next[c]?.verified);
+  const channelKeys = Object.keys(next) as OtpChannel[];
+  // A challenge with no channels must never count as "all verified" — an empty
+  // `.every(...)` is vacuously true, which would let it pass with nothing checked.
+  const allVerified = channelKeys.length > 0 && channelKeys.every((c) => next[c]?.verified);
   const updated = await store.updateChallenge(challengeId, {
     channels: next,
     attempts: challenge.attempts + 1,
