@@ -28,10 +28,15 @@ const globalOcr = globalThis as unknown as {
 
 async function makeWorker(): Promise<Worker> {
   // On serverless hosts (Vercel) the project directory is read-only; only the
-  // OS temp dir is writable. Tesseract caches its downloaded language data
-  // there, so point it at /tmp or it fails trying to write to the app folder.
+  // OS temp dir is writable, so Tesseract's cache must live there.
   const cachePath = join(tmpdir(), 'nammasahaay-tesseract');
-  const worker = await createWorker('eng', 1, { cachePath });
+  // Load the language data from the copy bundled with the app (see
+  // `outputFileTracingIncludes` in next.config.mjs) instead of downloading
+  // ~5 MB from a CDN on every cold start — that download is what made the ID
+  // step hang for a minute on Vercel. `gzip: false` because our file is the
+  // raw, uncompressed `eng.traineddata`.
+  const langPath = process.cwd();
+  const worker = await createWorker('eng', 1, { cachePath, langPath, gzip: false });
   return worker;
 }
 

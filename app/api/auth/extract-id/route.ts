@@ -47,16 +47,32 @@ export async function POST(request: Request) {
 
   try {
     const buffer = Buffer.from(await file.arrayBuffer());
-    const ocr = await readImage(buffer);
+    // Cap how long OCR may run. On a cold serverless function Tesseract can take
+    // far longer than the request should ever wait, so if it does not finish in
+    // time we stop and let the citizen type their details in — which the review
+    // step already supports — instead of leaving the UI stuck on "Reading...".
+    const ocr = await withTimeout(readImage(buffer), 25000);
     const identity = extractIdentity(ocr);
     // Never send the raw OCR dump to the browser.
     const { rawText: _rawText, ...safe } = identity;
     return NextResponse.json({ identity: safe });
   } catch (error) {
+    const timedOut = (error as Error)?.message === 'ocr-timeout';
     console.error('[extract-id] failed', error);
     return NextResponse.json(
-      { error: 'We could not read that image. Try a clearer, well-lit photo.' },
-      { status: 500 },
+      {
+        error: timedOut
+          ? 'Reading the ID is taking too long. Please enter your details manually.'
+          : 'We could not read that image. Try a clearer photo, or enter your details manually.',
+      },
+      { status: timedOut ? 504 : 500 },
     );
   }
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error('ocr-timeout')), ms)),
+  ]);
 }
