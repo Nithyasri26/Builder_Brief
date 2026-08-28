@@ -2,6 +2,12 @@ import { AppShell } from '@/components/layout/app-shell';
 import { getDatabase } from '@/lib/database';
 import { getCurrentUserId } from '@/lib/security/session';
 
+// This layout reads the session cookie and loads per-user data from the
+// database, so it must never be prerendered at build time. Without this, `next
+// build` tries to statically render it, connects to MongoDB during the build,
+// and fails on any host where the database is not reachable at build time.
+export const dynamic = 'force-dynamic';
+
 /**
  * Layout for the signed-in application. Everything under (app) is reached only
  * after middleware has confirmed a session, so this can assume a current user
