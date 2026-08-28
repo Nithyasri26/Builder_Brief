@@ -4,23 +4,53 @@ import { GeminiProvider } from './providers/gemini-provider';
 import { OpenAIProvider } from './providers/openai-provider';
 import { LocalModelProvider } from './providers/local-provider';
 import { NullProvider } from './providers/null-provider';
+import { FallbackProvider } from './providers/fallback-provider';
 import { classifyByRules } from './rule-classifier';
 
 let provider: AIProvider | null = null;
 
-/** Resolves the configured provider once per process. */
+function buildProvider(name: string): AIProvider {
+  switch (name) {
+    case 'openai':
+      return new OpenAIProvider();
+    case 'local':
+      return new LocalModelProvider();
+    case 'gemini':
+      return new GeminiProvider();
+    default:
+      return new NullProvider();
+  }
+}
+
+/**
+ * Resolves the provider chain once per process.
+ *
+ * The provider named by AI_PROVIDER goes first, and every OTHER configured
+ * hosted provider is added behind it as an automatic fallback. So with
+ * AI_PROVIDER=openai and a Gemini key also present, a failed OpenAI call (e.g.
+ * a 429 quota error) transparently retries on Gemini before the app drops to
+ * the deterministic rule engine. Set AI_PROVIDER=none to disable models.
+ */
 export function getAIProvider(): AIProvider {
   if (provider) return provider;
   const configured = aiConfig().provider;
-  const candidate: AIProvider =
-    configured === 'openai'
-      ? new OpenAIProvider()
-      : configured === 'local'
-        ? new LocalModelProvider()
-        : configured === 'none'
-          ? new NullProvider()
-          : new GeminiProvider();
-  provider = candidate.isConfigured() ? candidate : new NullProvider();
+  if (configured === 'none') {
+    provider = new NullProvider();
+    return provider;
+  }
+
+  // Primary first, then the remaining hosted providers as fallbacks, de-duped.
+  const order = [configured, 'openai', 'gemini', 'local'].filter(
+    (name, index, all) => all.indexOf(name) === index,
+  );
+  const chain = order.map(buildProvider).filter((candidate) => candidate.isConfigured());
+
+  provider =
+    chain.length === 0
+      ? new NullProvider()
+      : chain.length === 1
+        ? chain[0]
+        : new FallbackProvider(chain);
   return provider;
 }
 
