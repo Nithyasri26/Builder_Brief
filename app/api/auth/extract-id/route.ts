@@ -4,6 +4,11 @@ import { extractIdentity } from '@/lib/kyc/extract';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+// OCR (Tesseract + language-data download + image processing) is slow to start
+// on a cold serverless function and blows past the default 10s limit, leaving
+// the UI stuck on "Reading your ID...". Give it room. 60s is the Vercel Hobby
+// ceiling; raise further on paid plans if needed.
+export const maxDuration = 60;
 
 const MAX_BYTES = 12 * 1024 * 1024; // 12 MB
 

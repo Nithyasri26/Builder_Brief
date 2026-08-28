@@ -1,4 +1,6 @@
 import 'server-only';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import sharp from 'sharp';
 import { createWorker, type Worker } from 'tesseract.js';
 
@@ -25,7 +27,11 @@ const globalOcr = globalThis as unknown as {
 };
 
 async function makeWorker(): Promise<Worker> {
-  const worker = await createWorker('eng');
+  // On serverless hosts (Vercel) the project directory is read-only; only the
+  // OS temp dir is writable. Tesseract caches its downloaded language data
+  // there, so point it at /tmp or it fails trying to write to the app folder.
+  const cachePath = join(tmpdir(), 'nammasahaay-tesseract');
+  const worker = await createWorker('eng', 1, { cachePath });
   return worker;
 }
 
