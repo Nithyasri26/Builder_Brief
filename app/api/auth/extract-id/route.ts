@@ -51,7 +51,7 @@ export async function POST(request: Request) {
     // far longer than the request should ever wait, so if it does not finish in
     // time we stop and let the citizen type their details in — which the review
     // step already supports — instead of leaving the UI stuck on "Reading...".
-    const ocr = await withTimeout(readImage(buffer), 25000);
+    const ocr = await withTimeout(readImage(buffer), 12000);
     const identity = extractIdentity(ocr);
     // Never send the raw OCR dump to the browser.
     const { rawText: _rawText, ...safe } = identity;
