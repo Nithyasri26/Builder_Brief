@@ -20,6 +20,17 @@ import { mongoConfig } from '@/lib/config';
 async function expandSrvUri(uri: string): Promise<string> {
   if (!uri.startsWith('mongodb+srv://')) return uri;
 
+  // On a managed host (Vercel, and most serverless/cloud platforms) the driver's
+  // own SRV lookup works fine, and routing DNS through a public resolver can hang
+  // — outbound port 53 to 8.8.8.8 is often blocked, so the request stalls until
+  // the function times out. This custom resolution exists only to work around a
+  // broken *local* router, so skip it entirely on those hosts and let the driver
+  // resolve natively. Force it on anywhere with MONGODB_FORCE_SRV_EXPANSION=1.
+  const onManagedHost = Boolean(process.env.VERCEL || process.env.AWS_REGION || process.env.NETLIFY);
+  if (onManagedHost && process.env.MONGODB_FORCE_SRV_EXPANSION !== '1') {
+    return uri;
+  }
+
   const resolvers = (process.env.MONGODB_DNS_SERVERS ?? '8.8.8.8,1.1.1.1')
     .split(',')
     .map((s) => s.trim())
