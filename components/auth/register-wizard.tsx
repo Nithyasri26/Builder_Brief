@@ -439,6 +439,46 @@ function Select({ className, children, ...props }: React.SelectHTMLAttributes<HT
   );
 }
 
+interface TesseractLike {
+  createWorker: (
+    lang: string,
+    oem: number,
+    options: { logger?: (m: { status?: string; progress?: number }) => void },
+  ) => Promise<{
+    recognize: (image: File) => Promise<{ data: { text?: string; confidence?: number } }>;
+    terminate: () => Promise<unknown>;
+  }>;
+}
+
+declare global {
+  interface Window {
+    Tesseract?: TesseractLike;
+  }
+}
+
+let tesseractPromise: Promise<TesseractLike> | null = null;
+
+/** Loads Tesseract.js from a CDN once, on demand — never bundled into the app. */
+function loadTesseract(): Promise<TesseractLike> {
+  if (typeof window !== 'undefined' && window.Tesseract) return Promise.resolve(window.Tesseract);
+  if (tesseractPromise) return tesseractPromise;
+  tesseractPromise = new Promise<TesseractLike>((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+    script.async = true;
+    script.onload = () => {
+      if (window.Tesseract) resolve(window.Tesseract);
+      else reject(new Error('The reader could not start. Please enter your details manually.'));
+    };
+    script.onerror = () => {
+      tesseractPromise = null;
+      reject(new Error('Could not load the reader. Check your connection, or enter details manually.'));
+    };
+    document.head.appendChild(script);
+  });
+  return tesseractPromise;
+}
+
 function UploadStep({
   busy,
   setBusy,
@@ -457,6 +497,7 @@ function UploadStep({
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [progress, setProgress] = useState<number | null>(null);
 
   function pick(f: File | null) {
     setError(null);
@@ -471,17 +512,47 @@ function UploadStep({
     if (!file) return;
     setBusy(true);
     setError(null);
+    setProgress(0);
     try {
-      const form = new FormData();
-      form.append('file', file);
-      const res = await fetch('/api/auth/extract-id', { method: 'POST', body: form });
+      // Run OCR in the BROWSER. Tesseract.js is built for this, and it keeps the
+      // heavy work off the server — a serverless function would time out on it.
+      // The server then only parses the recognised text into fields (instant).
+      // Loaded from a CDN at runtime (not bundled) so it never bloats the build.
+      const Tesseract = await loadTesseract();
+      const worker = await Tesseract.createWorker('eng', 1, {
+        logger: (m: { status?: string; progress?: number }) => {
+          if (m.status === 'recognizing text' && typeof m.progress === 'number') {
+            setProgress(Math.round(m.progress * 100));
+          }
+        },
+      });
+      let text = '';
+      let confidence = 0;
+      try {
+        const { data } = await worker.recognize(file);
+        text = data.text ?? '';
+        confidence = data.confidence ?? 0;
+      } finally {
+        await worker.terminate();
+      }
+
+      const res = await fetch('/api/auth/extract-id', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, confidence }),
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Could not read that image.');
       onExtracted(data.identity as ExtractedIdentity);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong.');
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'We could not read that image. Please enter your details manually.',
+      );
     } finally {
       setBusy(false);
+      setProgress(null);
     }
   }
 
@@ -531,7 +602,7 @@ function UploadStep({
       <Button type="button" size="lg" className="w-full" onClick={read} disabled={!file || busy}>
         {busy ? (
           <>
-            <Spinner /> Reading your ID…
+            <Spinner /> Reading your ID{progress !== null ? ` … ${progress}%` : '…'}
           </>
         ) : (
           <>

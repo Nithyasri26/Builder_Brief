@@ -18,6 +18,28 @@ const MAX_BYTES = 12 * 1024 * 1024; // 12 MB
  * step of registration.
  */
 export async function POST(request: Request) {
+  // Preferred path: the browser already ran OCR (Tesseract.js in the client),
+  // so it sends just the recognised text. Parsing text into fields is pure,
+  // instant JavaScript — no Tesseract on the server, no serverless timeout.
+  const contentType = request.headers.get('content-type') ?? '';
+  if (contentType.includes('application/json')) {
+    const body = (await request.json().catch(() => null)) as
+      | { text?: unknown; confidence?: unknown }
+      | null;
+    const text = typeof body?.text === 'string' ? body.text : '';
+    if (!text.trim()) {
+      return NextResponse.json(
+        { error: 'We could not read any text from that image. Please enter your details manually.' },
+        { status: 422 },
+      );
+    }
+    const confidence = Number(body?.confidence);
+    const identity = extractIdentity({ text, confidence: Number.isFinite(confidence) ? confidence : 0 });
+    const { rawText: _rawText, ...safe } = identity;
+    return NextResponse.json({ identity: safe });
+  }
+
+  // Fallback path: an actual image upload (older clients / no browser OCR).
   let form: FormData;
   try {
     form = await request.formData();
